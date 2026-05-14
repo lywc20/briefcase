@@ -1,0 +1,16 @@
+# Virtual environment created by uv
+.venv/
+
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# OS artifacts
+.DS_Store
+
+# Logs
+*.log
+uvicorn.log
+
