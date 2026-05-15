@@ -7,7 +7,6 @@ export default function Navbar() {
         display: "flex",
         gap: "8px",
         padding: "10px",
-        // background: "#d7e7ff",
         background: "grey",
         borderBottom: "2px solid silver",
       }}
@@ -16,8 +15,12 @@ export default function Navbar() {
       <NavButton href={`mailto:${process.env.NEXT_PUBLIC_CONTACT_EMAIL}`}>
         Mail
       </NavButton>
-      <NavButton href="/chat">Chat</NavButton>
-      <NavButton href="/news">Github</NavButton>
+      <NavButton href={process.env.NEXT_PUBLIC_CONTACT_LINKEDIN as string}>
+        LinkedIn
+      </NavButton>
+      <NavButton href={process.env.NEXT_PUBLIC_GITHUB as string}>
+        Github
+      </NavButton>
     </nav>
   );
 }
