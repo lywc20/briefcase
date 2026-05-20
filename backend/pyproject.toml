@@ -3,9 +3,19 @@ name = "backend"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = "==3.12.*"
 dependencies = [
     "fastapi[standard]>=0.136.1",
+    "langchain-community>=0.4.1",
+    "langchain-text-splitters>=1.1.2",
+    "sentence-transformers>=5.5.0",
+    "transformers<5.0.0", # https://github.com/huggingface/transformers/issues/43784
+    "numpy<=1.26.2", # https://stackoverflow.com/questions/78681145/pytorch-userwarning-failed-to-initialize-numpy-array-api-not-found-and-bertmo
+    "orjson>=3.11.9",
 ]
 [tool.fastapi]
 entrypoint = "app.main:app"
+[tool.uv]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'", # TODO: Make system agnostic
+]
