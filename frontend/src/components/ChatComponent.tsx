@@ -1,8 +1,42 @@
 "use client";
 import { useRef, useEffect, useCallback, useState } from "react";
+
+const YOU = "you";
+type Message = {
+  author?: string;
+  content: string;
+};
+
+function newMessage(content: string, author?: string) {
+  return { author, content };
+}
+const firstMessage = {
+  content: "You have entered the chat room.",
+};
+
 const ChatComponent = () => {
-  const [messages, setMessages] = useState(["You have entered the chat room."]);
-  console.log(messages);
+  const [messages, setMessages] = useState([firstMessage]);
+  useEffect(() => {
+    const firstContact = async () => {
+      try {
+        const resp = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/first_contact`,
+        );
+        const data = (await resp.json()) as Message;
+        setMessages((prev) => [...prev, data]);
+      } catch (err) {
+        if (err instanceof Error) {
+          console.warn(err.message);
+          setMessages((prev) => [...prev, newMessage(err.message)]);
+        } else {
+          console.warn(err);
+        }
+      }
+    };
+
+    firstContact();
+  }, []);
+
   return (
     <>
       <ChatLog messages={messages} />
@@ -11,7 +45,24 @@ const ChatComponent = () => {
   );
 };
 
-const ChatLog = ({ messages = [] }: { messages: string[] }) => {
+const ColorCoder = ({ author }: { author?: string }) => {
+  const mapper: Record<string, string> = {
+    you: "text-blue-500",
+    system: "text-red-500",
+  };
+
+  if (!author) {
+    return <span></span>;
+  }
+
+  return (
+    <>
+      <span className={`${mapper[author]} font-bold`}>{author}</span>
+      <span>:</span>
+    </>
+  );
+};
+const ChatLog = ({ messages = [] }: { messages: Message[] }) => {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -33,10 +84,10 @@ const ChatLog = ({ messages = [] }: { messages: string[] }) => {
   return (
     <>
       <hr />
-      <div className="border-2 border-solid border-black bg-white text-black h-[500px] w-[250px] m-[10px] flex flex-col overflow-auto p-[3px] justify-end">
+      <div className="border-2 border-solid border-black bg-white text-black h-[500px] w-[350px] m-[10px] flex flex-col overflow-auto p-[3px] justify-end">
         {messages.map((message, id) => (
           <div key={id} className="p-1">
-            {message}
+            <ColorCoder author={message.author} /> {message.content}
           </div>
         ))}
 
@@ -47,7 +98,7 @@ const ChatLog = ({ messages = [] }: { messages: string[] }) => {
 };
 
 type ChatInputBufferProps = {
-  setMessages: React.Dispatch<React.SetStateAction<string[]>>;
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
 };
 
 const ChatInputBuffer = ({ setMessages }: ChatInputBufferProps) => {
@@ -62,7 +113,7 @@ const ChatInputBuffer = ({ setMessages }: ChatInputBufferProps) => {
 
       const message = messageBuffer.value;
       if (!message) return;
-      setMessages((prev) => [...prev, message]);
+      setMessages((prev) => [...prev, newMessage(message, YOU)]);
 
       messageBuffer.value = "";
     },
@@ -80,17 +131,18 @@ const ChatInputBuffer = ({ setMessages }: ChatInputBufferProps) => {
           color: "black",
           background: "white",
           height: "100px",
-          width: "250px",
+          width: "350px",
         }}
       />
 
       <input
         type="submit"
-        value="Enter"
+        value="Send"
         style={{
           border: "1px solid black",
           height: "50px",
-          width: "50px",
+          background: "gray",
+          width: "100px",
         }}
       />
     </form>
