@@ -7,15 +7,11 @@ type Message = {
   content: string;
 };
 
-function newMessage(content: string, author?: string) {
-  return { author, content };
-}
-const firstMessage = {
-  content: "You have entered the chat room.",
-};
+const newMessage = (content: string, author?: string) => ({ author, content });
 
 const ChatComponent = () => {
-  const [messages, setMessages] = useState([firstMessage]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   useEffect(() => {
     const firstContact = async () => {
       try {
@@ -40,7 +36,11 @@ const ChatComponent = () => {
   return (
     <>
       <ChatLog messages={messages} />
-      <ChatInputBuffer setMessages={setMessages} />
+      <ChatInputBuffer
+        setIsLoading={setIsLoading}
+        isLoading={isLoading}
+        setMessages={setMessages}
+      />
     </>
   );
 };
@@ -84,7 +84,7 @@ const ChatLog = ({ messages = [] }: { messages: Message[] }) => {
   return (
     <>
       <hr />
-      <div className="border-2 border-solid border-black bg-white text-black h-[500px] w-[350px] m-[10px] flex flex-col overflow-auto p-[3px] justify-end">
+      <div className="border-2 border-black bg-white text-black h-[500px] w-[350px] m-[10px] flex flex-col overflow-auto p-[3px]">
         {messages.map((message, id) => (
           <div key={id} className="p-1">
             <ColorCoder author={message.author} /> {message.content}
@@ -99,11 +99,17 @@ const ChatLog = ({ messages = [] }: { messages: Message[] }) => {
 
 type ChatInputBufferProps = {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  isLoading: boolean;
+  setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-const ChatInputBuffer = ({ setMessages }: ChatInputBufferProps) => {
+const ChatInputBuffer = ({
+  setMessages,
+  isLoading,
+  setIsLoading,
+}: ChatInputBufferProps) => {
   const onSubmit = useCallback(
-    (e: React.FormEvent<HTMLFormElement>) => {
+    async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       const form = e.currentTarget;
 
@@ -114,36 +120,51 @@ const ChatInputBuffer = ({ setMessages }: ChatInputBufferProps) => {
       const message = messageBuffer.value;
       if (!message) return;
       setMessages((prev) => [...prev, newMessage(message, YOU)]);
+      setIsLoading(true);
 
       messageBuffer.value = "";
+      try {
+        const resp = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/query`,
+          {
+            method: "POST",
+            body: JSON.stringify({ content: message, author: YOU }),
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+        const payload = await resp.json();
+
+        setMessages((prev) => [
+          ...prev,
+          newMessage(payload.content, payload.author),
+        ]);
+      } catch (err) {
+        console.warn(err);
+      } finally {
+        setIsLoading(false);
+      }
     },
-    [setMessages],
+    [setMessages, setIsLoading],
   );
 
   return (
-    <form onSubmit={onSubmit}>
-      <input
+    <form onSubmit={onSubmit} className="gap-5 flex item-end ml-2">
+      <textarea
         name="message"
-        type="text"
-        style={{
-          border: "2px solid black",
-          margin: "10px",
-          color: "black",
-          background: "white",
-          height: "100px",
-          width: "350px",
-        }}
+        className="h-24 w-[350px] resize-none rounded-md border-2 border-black bg-white p-2 text-black focus:outline-none"
+        autoComplete="off"
+        autoFocus={true}
       />
 
       <input
         type="submit"
-        value="Send"
-        style={{
-          border: "1px solid black",
-          height: "50px",
-          background: "gray",
-          width: "100px",
-        }}
+        disabled={isLoading}
+        value={isLoading ? "Loading" : "Send"}
+        className={`h-10 w-24 px-4 rounded-md text-white transition-colors ${
+          isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-sky-500"
+        }`}
       />
     </form>
   );
