@@ -12,6 +12,7 @@ dependencies = [
     "transformers<5.0.0", # https://github.com/huggingface/transformers/issues/43784
     "numpy<=1.26.2", # https://stackoverflow.com/questions/78681145/pytorch-userwarning-failed-to-initialize-numpy-array-api-not-found-and-bertmo
     "orjson>=3.11.9",
+    "accelerate>=1.13.0",
 ]
 [tool.fastapi]
 entrypoint = "app.main:app"
@@ -19,3 +20,8 @@ entrypoint = "app.main:app"
 required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'x86_64'", # TODO: Make system agnostic
 ]
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.format]
+quote-style = "double"

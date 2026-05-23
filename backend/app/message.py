@@ -1,11 +1,11 @@
 from app.constants import SYSTEM
+from pydantic import BaseModel
 
-class Message:
-    def __init__(self, author, content):
-        self.content = content 
-        self.author = author
+
+class Message(BaseModel):
+    content: str
+    author: str
 
     @classmethod
-    def from_server(cls, content):
-        return cls(SYSTEM, content)
-    
+    def from_server(cls, content: str):
+        return cls(author=SYSTEM, content=content)

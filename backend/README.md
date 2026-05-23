@@ -8,6 +8,10 @@ Client side handles retrieval
 - Textsplitter
 - Setence transformer
 
+## Running dev mode
+
+`uv run fastapi dev`
+
 ## Steps
 
 1. Setup a markdown file
