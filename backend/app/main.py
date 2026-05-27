@@ -7,7 +7,7 @@ from app.message import Message
 from sentence_transformers import SentenceTransformer
 from scripts.build_embeddings import build_embeddings
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,23 +32,16 @@ app.mount(
     name="static",
 )
 
+MODEL = "Qwen/Qwen2.5-3B-Instruct"
+
 cache = {}
 
 torch.random.manual_seed(0)
 
-tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
+tokenizer = AutoTokenizer.from_pretrained(MODEL)
 
-cache["generator"] = AutoModelForCausalLM.from_pretrained(
-    "microsoft/Phi-3-mini-4k-instruct",
-    device_map="cpu",
-    torch_dtype="auto",
-    trust_remote_code=False,
-)
-pipe = pipeline(
-    "text-generation",
-    model=cache["generator"],
-    tokenizer=tokenizer,
-)
+
+cache["generator"] = AutoModelForCausalLM.from_pretrained(MODEL)
 
 generation_args = {
     "max_new_tokens": 500,
@@ -92,12 +85,21 @@ def generate_response(chunks, query_text):
         ${query_text}
         If the information from the knolwedge base is useful, use it to respond the user statement. Otherwise return a professional response to the query.
     """
-    messages = [({"role": "user", "content": prompt})]
-    resp = pipe(messages, **generation_args)
 
-    for value in resp:
-        print(value)
-    return resp[0]["generated_text"]
+    messages = [{"role": "user", "content": prompt}]
+
+    inputs = tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+    ).to(cache["generator"].device)
+
+    resp = cache["generator"].generate(**inputs, max_new_tokens=40)
+    out = tokenizer.decode(resp[0][inputs["input_ids"].shape[-1] :])
+
+    return out
 
 
 def encode(message):
