@@ -1,4 +1,3 @@
-from math import sqrt
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,8 +5,9 @@ from pathlib import Path
 from app.message import Message
 from sentence_transformers import SentenceTransformer
 from scripts.build_embeddings import build_embeddings
-
+from contextlib import asynccontextmanager
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from numpy import linalg, dot
 import torch
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -16,7 +16,29 @@ origins = [
     "http://localhost:3000",
 ]
 
-app = FastAPI()
+cache = {}
+
+MODEL = "Qwen/Qwen2.5-3B-Instruct"
+
+
+@asynccontextmanager
+async def startup(app: FastAPI):
+    print(f"{'-' * 5} Starting Up {'-' * 5}")
+
+    torch.random.manual_seed(0)
+
+    cache["tokenizer"] = AutoTokenizer.from_pretrained(MODEL)
+
+    cache["generator"] = AutoModelForCausalLM.from_pretrained(MODEL)
+
+    cache["cv_chunks"], cache["cv_embeddings"] = build_embeddings()
+
+    yield
+
+    print(f"{'-' * 5} Shutting Down {'-' * 5}")
+
+
+app = FastAPI(lifespan=startup)
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,25 +53,6 @@ app.mount(
     StaticFiles(directory=FRONTEND_DIR / ".next/build"),
     name="static",
 )
-
-MODEL = "Qwen/Qwen2.5-3B-Instruct"
-
-cache = {}
-
-torch.random.manual_seed(0)
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL)
-
-
-cache["generator"] = AutoModelForCausalLM.from_pretrained(MODEL)
-
-generation_args = {
-    "max_new_tokens": 500,
-    "return_full_text": False,
-    "temperature": 0.0,
-    "do_sample": False,
-}
-cv_chunks, cv_embeddings = build_embeddings()
 
 
 @app.get("/")
@@ -66,7 +69,9 @@ async def first_const():
 async def query(payload: Message):
 
     enc = encode(payload.content)
-    relevant_information = get_relevant_chunks(enc, cv_chunks, cv_embeddings)
+    relevant_information = get_relevant_chunks(
+        enc, cache["cv_chunks"], cache["cv_embeddings"]
+    )
     resp = generate_response(relevant_information, payload.content)
 
     return Message.from_server(str(resp))
@@ -83,21 +88,28 @@ def generate_response(chunks, query_text):
 
         Here's the query the user made. 
         ${query_text}
-        If the information from the knolwedge base is useful, use it to respond the user statement. Otherwise return a professional response to the query.
+        If the information from the knowledge base is useful, use it to respond the user statement. Otherwise return a professional response to the query.
     """
 
     messages = [{"role": "user", "content": prompt}]
 
-    inputs = tokenizer.apply_chat_template(
-        messages,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt",
-    ).to(cache["generator"].device)
+    inputs = (
+        cache["tokenizer"]
+        .apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        )
+        .to(cache["generator"].device)
+    )
+    with torch.inference_mode():
+        resp = cache["generator"].generate(**inputs, max_new_tokens=40)
 
-    resp = cache["generator"].generate(**inputs, max_new_tokens=40)
-    out = tokenizer.decode(resp[0][inputs["input_ids"].shape[-1] :])
+    out = cache["tokenizer"].decode(
+        resp[0][inputs["input_ids"].shape[-1] :], skip_special_tokens=True
+    )
 
     return out
 
@@ -114,14 +126,7 @@ def encode(message):
 
 
 def cosine_similarity(e1, e2):
-    dot_product = 0
-    sum_of_squares_e1 = 0
-    sum_of_squares_e2 = 0
-    for element_1, element_2 in zip(e1, e2):
-        dot_product += element_1 * element_2
-        sum_of_squares_e1 += element_1 * element_1
-        sum_of_squares_e2 += element_2 * element_2
-    return dot_product / (sqrt(sum_of_squares_e1) * sqrt(sum_of_squares_e2))
+    return dot(e1, e2) / (linalg.norm(e1) * linalg.norm(e2))
 
 
 def get_relevant_chunks(query_embedding, chunks, embeddings):

@@ -2,6 +2,8 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 
 const YOU = "you";
+const SYSTEM = "system";
+
 type Message = {
   author?: string;
   content: string;
@@ -141,7 +143,14 @@ const ChatInputBuffer = ({
           newMessage(payload.content, payload.author),
         ]);
       } catch (err) {
-        console.warn(err);
+        if (err instanceof Error) {
+          setMessages((prev) => [
+            ...prev,
+            newMessage("Error, " + err.message, SYSTEM),
+          ]);
+
+          console.warn(err);
+        }
       } finally {
         setIsLoading(false);
       }
