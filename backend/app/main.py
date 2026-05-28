@@ -6,9 +6,8 @@ from app.message import Message
 from sentence_transformers import SentenceTransformer
 from scripts.build_embeddings import build_embeddings
 from contextlib import asynccontextmanager
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from numpy import linalg, dot
-import torch
+from llama_cpp import Llama
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
@@ -25,12 +24,9 @@ MODEL = "Qwen/Qwen2.5-3B-Instruct"
 async def startup(app: FastAPI):
     print(f"{'-' * 5} Starting Up {'-' * 5}")
 
-    torch.random.manual_seed(0)
-
-    cache["tokenizer"] = AutoTokenizer.from_pretrained(MODEL)
-
-    cache["generator"] = AutoModelForCausalLM.from_pretrained(MODEL)
-
+    cache["generator"] = Llama(
+        model_path="./models/Qwen2.5-7B-Instruct-Q4_K_M.gguf", n_ctx=4096, n_threads=6
+    )
     cache["cv_chunks"], cache["cv_embeddings"] = build_embeddings()
 
     yield
@@ -91,27 +87,9 @@ def generate_response(chunks, query_text):
         If the information from the knowledge base is useful, use it to respond the user statement. Otherwise return a professional response to the query.
     """
 
-    messages = [{"role": "user", "content": prompt}]
+    out = cache["generator"](prompt, max_tokens=256, temperature=0.7)
 
-    inputs = (
-        cache["tokenizer"]
-        .apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        )
-        .to(cache["generator"].device)
-    )
-    with torch.inference_mode():
-        resp = cache["generator"].generate(**inputs, max_new_tokens=40)
-
-    out = cache["tokenizer"].decode(
-        resp[0][inputs["input_ids"].shape[-1] :], skip_special_tokens=True
-    )
-
-    return out
+    return out["choices"][0]["text"]
 
 
 def encode(message):

@@ -18,3 +18,4 @@ uvicorn.log
 # Artifacts
 cv.md
 embeddings.json
+./models

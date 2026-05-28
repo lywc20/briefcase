@@ -13,6 +13,7 @@ dependencies = [
     "numpy<=1.26.2", # https://stackoverflow.com/questions/78681145/pytorch-userwarning-failed-to-initialize-numpy-array-api-not-found-and-bertmo
     "orjson>=3.11.9",
     "accelerate>=1.13.0",
+    "llama-cpp-python>=0.3.23",
 ]
 [tool.fastapi]
 entrypoint = "app.main:app"
