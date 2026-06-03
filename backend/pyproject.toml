@@ -3,7 +3,7 @@ name = "backend"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = "==3.12.*"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi[standard]>=0.136.1",
     "langchain-community>=0.4.1",
@@ -14,11 +14,12 @@ dependencies = [
     "orjson>=3.11.9",
     "accelerate>=1.13.0",
     "llama-cpp-python>=0.3.23",
+    "faiss-cpu>=1.14.2",
 ]
 [tool.fastapi]
 entrypoint = "app.main:app"
 [tool.uv]
-required-environments = [
+environments = [
     "sys_platform == 'darwin' and platform_machine == 'x86_64'", # TODO: Make system agnostic
 ]
 [tool.ruff]
