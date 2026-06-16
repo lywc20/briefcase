@@ -100,6 +100,25 @@ const ChatInputBuffer = ({
   setIsLoading,
   getNextId,
 }: ChatInputBufferProps) => {
+  const abortRef = useRef<AbortController | null>(null);
+  const [input, setInput] = useState("");
+  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Cleans up the abort controller on component unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  const handleAbort = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+      setIsLoading(false);
+    }
+  }, [setIsLoading]);
+
   const submitMessage = useCallback(
     async (message: string) => {
       setMessages((prev) => [
@@ -108,8 +127,12 @@ const ChatInputBuffer = ({
       ]);
       setIsLoading(true);
 
+      abortRef.current?.abort();
+
+      const controller = new AbortController();
+      abortRef.current = controller;
       try {
-        const resp = await fetchResponse(message);
+        const resp = await fetchResponse(message, controller.signal);
         const payload = await resp.json();
 
         setMessages((prev) => [
@@ -117,6 +140,10 @@ const ChatInputBuffer = ({
           newMessage(payload.content, getNextId(), payload.author),
         ]);
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          console.warn("Request aborted");
+          return;
+        }
         if (err instanceof Error) {
           setMessages((prev) => [
             ...prev,
@@ -126,13 +153,15 @@ const ChatInputBuffer = ({
           console.warn(err);
         }
       } finally {
-        setIsLoading(false);
+        if (abortRef.current === controller) {
+          setIsLoading(false);
+          abortRef.current = null;
+        }
       }
     },
     [setMessages, setIsLoading, getNextId],
   );
 
-  const [input, setInput] = useState("");
   const handleSubmit = useCallback(async () => {
     const value = input.trim();
     if (!value) return;
@@ -141,7 +170,6 @@ const ChatInputBuffer = ({
     await submitMessage(value);
   }, [input, submitMessage]);
 
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   useCmdKFocus(textAreaRef);
 
   return (
@@ -168,14 +196,16 @@ const ChatInputBuffer = ({
         value={input}
       />
 
-      <input
-        type="submit"
-        disabled={isLoading}
-        value={isLoading ? "Loading" : "Send"}
-        className={`h-10 w-24 px-4 rounded-md text-white transition-colors ${
-          isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-sky-500"
-        }`}
-      />
+      <button
+        type={isLoading ? "button" : "submit"}
+        onClick={isLoading ? handleAbort : undefined}
+        className={`h-10 w-24 px-4 rounded-md text-white font-medium transition-colors cursor-pointer ${isLoading
+            ? "bg-red-500 hover:bg-red-600 active:bg-red-700"
+            : "bg-sky-500 hover:bg-sky-600 active:bg-sky-700"
+          }`}
+      >
+        {isLoading ? "Abort" : "Send"}
+      </button>
     </form>
   );
 };

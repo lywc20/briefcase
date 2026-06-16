@@ -1,12 +1,16 @@
 import { Actor } from "./types";
 
-export async function fetchResponse(message: string) {
+export async function fetchResponse(
+  message: string,
+  abortSignal?: AbortSignal,
+) {
   return await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/query`, {
     method: "POST",
     body: JSON.stringify({ content: message, author: Actor.YOU }),
     headers: {
       "Content-Type": "application/json",
     },
+    signal: abortSignal,
   });
 }
 
