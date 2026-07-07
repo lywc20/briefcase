@@ -15,7 +15,7 @@ from langchain_text_splitters import (
 from llama_cpp import Llama
 from sentence_transformers import SentenceTransformer
 from starlette.concurrency import run_in_threadpool
-
+import asyncio
 from app.message import Message
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -83,6 +83,27 @@ def get_embedder(request: Request):
     return request.app.state.embedder
 
 
+async def stream_rag_response(request: Request, llm, query_content: str, context: str):
+    sync_stream = GeneratorManager(llm).generate_response_stream(
+        query=query_content, context=context
+    )
+    try:
+        while True:
+            await asyncio.sleep(0)
+            if await request.is_disconnected():
+                break
+
+            chunk = await run_in_threadpool(next, sync_stream, None)
+            if chunk is None:
+                break
+            yield chunk
+    except asyncio.CancelledError:
+        print("Request cancelled. Stopping inference.")
+        raise
+    finally:
+        sync_stream.close()
+
+
 @app.get("/")
 async def root():
     return {"message": "Hello World"}
@@ -95,6 +116,7 @@ async def first_const():
 
 @app.post("/query", response_class=StreamingResponse)
 async def query(
+    request: Request,
     query: Message,
     embedder=Depends(get_embedder),
     llm=Depends(get_llm),
@@ -106,7 +128,7 @@ async def query(
 
     if not retrieved:
 
-        def fallback_generator():
+        async def fallback_generator():
             yield "Unable to find relevant information in CV."
 
         return StreamingResponse(fallback_generator(), media_type="text/plain")
@@ -115,11 +137,10 @@ async def query(
 
     context = "\n\n".join(chunks)
 
-    stream = GeneratorManager(llm).generate_response_stream(
-        query=query.content, context=context
+    return StreamingResponse(
+        stream_rag_response(request, llm, query.content, context),
+        media_type="text/plain",
     )
-
-    return StreamingResponse(stream, media_type="text/plain")
 
 
 class EmbeddingManager:
