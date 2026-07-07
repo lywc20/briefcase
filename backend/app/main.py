@@ -4,6 +4,7 @@ from pathlib import Path
 import faiss
 import numpy as np
 from fastapi import Depends, FastAPI, Request
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from langchain_community.document_loaders import TextLoader
@@ -92,7 +93,7 @@ async def first_const():
     return Message.from_server("You have entered the chat room.")
 
 
-@app.post("/query")
+@app.post("/query", response_class=StreamingResponse)
 async def query(
     query: Message,
     embedder=Depends(get_embedder),
@@ -104,18 +105,21 @@ async def query(
     retrieved = retriever.get_relevant_chunks(query_embedding)
 
     if not retrieved:
-        return Message.from_server("Unable to find relevant information in CV.")
+
+        def fallback_generator():
+            yield "Unable to find relevant information in CV."
+
+        return StreamingResponse(fallback_generator(), media_type="text/plain")
 
     chunks = [item["chunk"] for item in retrieved]
 
     context = "\n\n".join(chunks)
 
-    resp = await GeneratorManager(llm).generate_response(
-        query=query.content,
-        context=context,
+    stream = GeneratorManager(llm).generate_response_stream(
+        query=query.content, context=context
     )
 
-    return Message.from_server(resp)
+    return StreamingResponse(stream, media_type="text/plain")
 
 
 class EmbeddingManager:
@@ -217,7 +221,7 @@ class GeneratorManager:
     def __init__(self, llm):
         self.llm = llm
 
-    def _generate_response(self, query, context):
+    def generate_response_stream(self, query, context):
 
         messages = [
             {
@@ -250,17 +254,14 @@ class GeneratorManager:
             },
         ]
 
-        response = self.llm.create_chat_completion(
+        response_stream = self.llm.create_chat_completion(
             messages=messages,
             max_tokens=256,
             temperature=0.7,
+            stream=True,
         )
 
-        return response["choices"][0]["message"]["content"]
-
-    async def generate_response(self, query, context):
-        return await run_in_threadpool(
-            self._generate_response,
-            query,
-            context,
-        )
+        for chunk in response_stream:
+            delta = chunk["choices"][0]["delta"]
+            if "content" in delta:
+                yield delta["content"]

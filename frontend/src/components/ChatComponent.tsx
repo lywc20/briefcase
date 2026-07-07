@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useEffect, useCallback, useState } from "react";
 import { Actor, Message } from "./types";
-import { fetchFirstContact, fetchResponse } from "./apis";
+import { fetchFirstContact, fetchResponseStream } from "./apis";
 import { useCmdKFocus, useChatAutoScroll, useSequentialId } from "./utils";
 
 const newMessage = (
@@ -104,7 +104,6 @@ const ChatInputBuffer = ({
   const [input, setInput] = useState("");
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Cleans up the abort controller on component unmount
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
@@ -132,13 +131,26 @@ const ChatInputBuffer = ({
       const controller = new AbortController();
       abortRef.current = controller;
       try {
-        const resp = await fetchResponse(message, controller.signal);
-        const payload = await resp.json();
-
+        const botMessageId = getNextId();
         setMessages((prev) => [
           ...prev,
-          newMessage(payload.content, getNextId(), payload.author),
+          newMessage("", botMessageId, Actor.SYSTEM),
         ]);
+
+        let accumulatedContent = "";
+
+        const stream = fetchResponseStream(message, controller.signal);
+        for await (const chunk of stream) {
+          accumulatedContent += chunk;
+
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === botMessageId
+                ? { ...msg, content: accumulatedContent }
+                : msg,
+            ),
+          );
+        }
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
           console.warn("Request aborted");
